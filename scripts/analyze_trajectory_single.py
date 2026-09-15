@@ -50,6 +50,7 @@ def analyze_multiple_trials(results_dir, est_type, n_trials,
                                            est_type, suffix)
             Trajectory.remove_files_in_save_dir(results_dir, est_type,
                                                 match_base_fn)
+        # instantiate Trajectory object (loads data and computes alignment)
         traj = Trajectory(
             results_dir, est_type=est_type, suffix=suffix,
             nm_est=kNsToEstFnMapping[est_type] + suffix + '.'+kFnExt,
@@ -61,6 +62,7 @@ def analyze_multiple_trials(results_dir, est_type, n_trials,
             if compute_odometry_error:
                 traj.compute_relative_errors()
         if traj.success:
+            # write error stats to yaml and cache the errors
             traj.cache_current_error()
             traj.write_errors_to_yaml()
 
@@ -204,8 +206,13 @@ if __name__ == '__main__':
             print("#### Skip plotting and go to next error type.")
             continue
 
+        # ----------------------------------------------------------------------
+        # CREATE PLOTS
+        # ----------------------------------------------------------------------
+            # absolute error plots
         print(Fore.MAGENTA +
               ">>> Plotting absolute error for one trajectory...")
+                # trajectory top view
         fig = plt.figure(figsize=(6, 5.5))
         ax = fig.add_subplot(111, aspect='equal',
                              xlabel='x [m]', ylabel='y [m]')
@@ -218,6 +225,7 @@ if __name__ == '__main__':
         fig.savefig(plot_dir_i+'/trajectory_top' + '_' + plot_traj.align_str +
                     FORMAT, bbox_inches="tight")
 
+            # trajectory side view
         fig = plt.figure(figsize=(6, 5.5))
         ax = fig.add_subplot(111, aspect='equal',
                              xlabel='x [m]', ylabel='z [m]')
@@ -228,6 +236,7 @@ if __name__ == '__main__':
         fig.savefig(plot_dir_i+'/trajectory_side' + '_' + plot_traj.align_str +
                     FORMAT, bbox_inches="tight")
 
+            # absolute translation error
         fig = plt.figure(figsize=(8, 2.5))
         ax = fig.add_subplot(
             111, xlabel='Distance [m]', ylabel='Position Drift [mm]',
@@ -240,6 +249,7 @@ if __name__ == '__main__':
         fig.savefig(plot_dir_i+'/translation_error' + '_' + plot_traj.align_str
                     + FORMAT, bbox_inches="tight")
 
+            # absolute rotation error
         fig = plt.figure(figsize=(8, 2.5))
         ax = fig.add_subplot(
             111, xlabel='Distance [m]', ylabel='Orient. err. [deg]',
@@ -253,6 +263,7 @@ if __name__ == '__main__':
         fig.savefig(plot_dir_i+'/rotation_error'+'_'+plot_traj.align_str +
                     FORMAT, bbox_inches='tight')
 
+            # absolute scale error
         fig = plt.figure(figsize=(8, 2.5))
         ax = fig.add_subplot(
             111, xlabel='Distance [m]', ylabel='Scale Drift [\%]',
@@ -296,35 +307,108 @@ if __name__ == '__main__':
         if n_trials > 1:
             suffix = '_mt'
 
-        plot_types = ['rel_trans', 'rel_trans_perc', 'rel_yaw']
+            # relative error plots
+        plot_types = [
+            'rel_trans', 'rel_trans_perc', 
+            'rel_trans_xy', 'rel_trans_xy_perc', 
+            'rel_trans_z', 'rel_trans_z_perc', 
+            'rel_rot', 'rel_rot_deg_per_m',
+            'rel_yaw', 'rel_yaw_deg_per_m',
+            'rel_pitch', 'rel_pitch_deg_per_m',
+            'rel_roll', 'rel_roll_deg_per_m',
+            'rel_gravity'
+        ]
         rel_errors, distances = mt_error.get_relative_errors_and_distances(
             error_types=plot_types)
 
         labels = ['Estimate']
         colors = ['b']
 
+                # 3D translation error [m]
         fig = plt.figure(figsize=(6, 2.5))
         ax = fig.add_subplot(
             111, xlabel='Distance traveled [m]',
-            ylabel='Translation error [m]')
+            ylabel='3D Translation error [m]')
         pu.boxplot_compare(ax, distances, rel_errors['rel_trans'],
                            labels, colors)
         fig.tight_layout()
-        fig.savefig(plot_dir_i+'/rel_translation_error' + suffix + FORMAT,
+        fig.savefig(plot_dir_i+'/rel_3D_translation_error' + suffix + FORMAT,
                     bbox_inches="tight")
         plt.close(fig)
 
+                # 3D translation error [%]
         fig = plt.figure(figsize=(6, 2.5))
         ax = fig.add_subplot(
             111, xlabel='Distance traveled [m]',
-            ylabel='Translation error [\%]')
+            ylabel='3D Translation error [%]')
         pu.boxplot_compare(
             ax, distances, rel_errors['rel_trans_perc'], labels, colors)
         fig.tight_layout()
-        fig.savefig(plot_dir_i+'/rel_translation_error_perc'+suffix+FORMAT,
+        fig.savefig(plot_dir_i+'/rel_3D_translation_error_perc'+suffix+FORMAT,
                     bbox_inches="tight")
         plt.close(fig)
 
+                # 2D translation error [m]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='x-y Translation error [m]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_trans_xy'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_2D_translation_error' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # 2D translation error [%]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='x-y Translation error [%]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_trans_xy_perc'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_2D_translation_error_perc' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # vertical translation error [m]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='z Translation error [m]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_trans_z'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_vertical_translation_error' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # vertical translation error [%]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='z Translation error [%]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_trans_z_perc'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_vertical_translation_error_perc' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # rotation error [deg]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='Rotation error [deg]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_rot'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_rot_' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # yaw error [deg]
         fig = plt.figure(figsize=(6, 2.5))
         ax = fig.add_subplot(
             111, xlabel='Distance traveled [m]',
@@ -335,6 +419,91 @@ if __name__ == '__main__':
         fig.savefig(plot_dir_i+'/rel_yaw_error' + suffix + FORMAT,
                     bbox_inches="tight")
         plt.close(fig)
+
+                # pitch error [deg]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='Pitch error [deg]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_pitch'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_pitch_error' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # roll error [deg]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='Roll error [deg]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_roll'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_roll_error' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # gravity (pitch-roll) error [deg]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='Gravity error [deg]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_gravity'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_gravity_error' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # rotation error per meter traveled [deg]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='Rotation error per meter [deg]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_rot_deg_per_m'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_rot_deg_per_m' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # yaw error per meter traveled [deg]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='Yaw error per meter [deg]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_yaw_deg_per_m'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_yaw_deg_per_m' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # pitch error per meter traveled [deg]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='Pitch error per meter [deg]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_pitch_deg_per_m'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_pitch_deg_per_m' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # roll error per meter traveled [deg]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='Roll error per meter [deg]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_roll_deg_per_m'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_roll_deg_per_m' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
 
         print(Fore.GREEN +
               "#### Done processing error type {0} ####".format(est_type_i))

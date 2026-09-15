@@ -302,6 +302,7 @@ class Trajectory:
         return
 
     def write_errors_to_yaml(self):
+        # absolute error stats
         self.abs_err_stats_fn = os.path.join(
             self.saved_results_dir, 'absolute_err_statistics'+'_' +
             self.align_str + self.suffix_str + '.yaml')
@@ -330,6 +331,7 @@ class Trajectory:
             self.abs_errors['abs_e_roll_stats'], 'roll',
             self.abs_err_stats_fn)
 
+        # relative error stats
         self.rel_error_stats_fns = []
         for dist in self.rel_errors:
             cur_err = self.rel_errors[dist]
