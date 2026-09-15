@@ -16,10 +16,17 @@ from fn_constants import kNsToEstFnMapping, kNsToMatchFnMapping, kFnExt
 from multiple_traj_errors import MulTrajError
 
 init(autoreset=True)
-rc('font', **{'family': 'serif', 'serif': ['Cardo']})
-rc('text', usetex=True)
+#rc('font', **{'family': 'serif', 'serif': ['Cardo']})  # LEVIN
+rc('font', family='serif')
+#rc('text', usetex=True) # LEVIN
 
 FORMAT = '.pdf'
+
+
+def parse_float_values(values):
+    """Parse comma- or whitespace-separated float values from the CLI."""
+    value_string = ' '.join(values).strip().strip('[]')
+    return [float(value) for value in value_string.replace(',', ' ').split()]
 
 
 def analyze_multiple_trials(results_dir, est_type, n_trials,
@@ -103,6 +110,14 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--no_plot', dest='plot',
                         action='store_false')
+    parser.add_argument(
+        '--preset_rpe_subtrajectory_lengths_meters', type=str, nargs="+",
+        help='Preset subtrajectory lengths for relative error computation in meters',
+    )
+    parser.add_argument(
+        '--preset_rpe_subtrajectory_lengths_percentage', type=str, nargs="+",
+        help='Preset subtrajectory lengths as percentages of total trajectory length',
+    )
     parser.set_defaults(plot=True)
     args = parser.parse_args()
 
@@ -111,6 +126,21 @@ if __name__ == '__main__':
     for est_type in args.est_types:
         assert est_type in kNsToEstFnMapping
         assert est_type in kNsToMatchFnMapping
+
+    if (args.preset_rpe_subtrajectory_lengths_meters is not None and
+            args.preset_rpe_subtrajectory_lengths_percentage is not None):
+        raise ValueError(
+            "Cannot specify both preset_rpe_subtrajectory_lengths_meters and preset_rpe_subtrajectory_lengths_percentage. Please choose one."
+        )
+
+    if args.preset_rpe_subtrajectory_lengths_meters is not None:
+        args.preset_rpe_subtrajectory_lengths_meters = parse_float_values(
+            args.preset_rpe_subtrajectory_lengths_meters)
+    if args.preset_rpe_subtrajectory_lengths_percentage is not None:
+        args.preset_rpe_subtrajectory_lengths_percentage = [
+            percentage / 100.0
+            for percentage in parse_float_values(
+                args.preset_rpe_subtrajectory_lengths_percentage)]
 
     top_plots_dir = args.plots_dir
     if not args.plots_dir:
@@ -145,14 +175,20 @@ if __name__ == '__main__':
               "We will plot trials {0}.".format(args.mul_plot_idx))
     else:
         args.mul_plot_idx = [0]
-    assert len(args.mul_plot_idx) is 1, "Multiple plots not supported yet"
+    assert len(args.mul_plot_idx) == 1, "Multiple plots not supported yet"
 
     for est_type_i, plot_dir_i in zip(args.est_types, plots_dirs):
         print(Fore.RED +
               "#### Processing error type {0} ####".format(est_type_i))
         mt_error = MulTrajError()
         traj_list, mt_error = analyze_multiple_trials(
-            args.result_dir, est_type_i, n_trials, args.recalculate_errors)
+            args.result_dir, 
+            est_type_i, 
+            n_trials, 
+            args.recalculate_errors,
+            args.preset_rpe_subtrajectory_lengths_meters or [],
+            args.preset_rpe_subtrajectory_lengths_percentage or [],
+        )
         if traj_list:
             plot_traj = traj_list[args.mul_plot_idx[0]]
         else:

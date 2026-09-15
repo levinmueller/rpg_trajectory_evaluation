@@ -10,8 +10,9 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import rc
-rc('font', **{'family': 'serif', 'serif': ['Cardo']})
-rc('text', usetex=True)
+#rc('font', **{'family': 'serif', 'serif': ['Cardo']})  # LEVIN
+rc('font', family='serif')
+#rc('text', usetex=True) # LEVIN
 
 FORMAT = '.pdf'
 

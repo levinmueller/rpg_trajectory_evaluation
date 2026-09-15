@@ -144,6 +144,8 @@ you will find the following in `plots`:
 * `--recalculate_errors`: will remove the error cache file mentioned above and re-calculate everything. Default: `False`.
 * `--png`: save plots as png instead of pdf. Default: `False`
 * `--mul_trials`: will analyze `n` runs. In the case of `n > 1`, the estimate files should end with a number suffix (e.g., `stamped_traj_estimate0.txt`). Default: `None`
+* `--preset_rpe_subtrajectory_lengths_meters`: compute relative pose errors at the specified subtrajectory lengths in meters, e.g. `--preset_rpe_subtrajectory_lengths_meters "[1.0, 5.0, 10.0]"`.
+* `--preset_rpe_subtrajectory_lengths_percentage`: compute relative pose errors at the specified percentages of the total trajectory length, e.g. `--preset_rpe_subtrajectory_lengths_percentage 10 25 50`. The two RPE options are mutually exclusive.
 
 #### Advanced: Different estimation type
 Sometimes, a SLAM algorithm outputs different types of trajectories, such as real-time poses and optimized keyframe poses (e.g., pose graph, bundle adjustment). By specifying the estimation type (at the end of the command line), you can ask the script to analyze different files, for example

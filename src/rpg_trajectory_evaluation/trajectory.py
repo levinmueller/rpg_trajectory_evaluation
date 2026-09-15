@@ -272,27 +272,32 @@ class Trajectory:
             print(Fore.RED+'Calculating RMSE...')
             # align trajectory if necessary
             self.align_trajectory()
-            e_trans, e_trans_vec, e_rot, e_ypr, e_scale_perc =\
-                traj_err.compute_absolute_error(self.p_es_aligned,
-                                                self.q_es_aligned,
-                                                self.p_gt,
-                                                self.q_gt)
-            stats_trans = res_writer.compute_statistics(e_trans)
-            stats_rot = res_writer.compute_statistics(e_rot)
-            stats_scale = res_writer.compute_statistics(e_scale_perc)
+            abs_err = traj_err.compute_absolute_error(
+                self.p_es_aligned, self.q_es_aligned, self.p_gt, self.q_gt)
 
-            self.abs_errors['abs_e_trans'] = e_trans
-            self.abs_errors['abs_e_trans_stats'] = stats_trans
+            self.abs_errors['abs_e_trans'] = abs_err['trans']
+            self.abs_errors['abs_e_trans_stats'] = res_writer.compute_statistics(abs_err['trans'])
+            self.abs_errors['abs_e_trans_vec'] = abs_err['trans_vec']
 
-            self.abs_errors['abs_e_trans_vec'] = e_trans_vec
+            self.abs_errors['abs_e_trans_xy'] = abs_err['trans_xy']
+            self.abs_errors['abs_e_trans_xy_stats'] = res_writer.compute_statistics(abs_err['trans_xy'])
+            self.abs_errors['abs_e_trans_z'] = abs_err['trans_z']
+            self.abs_errors['abs_e_trans_z_stats'] = res_writer.compute_statistics(abs_err['trans_z'])
 
-            self.abs_errors['abs_e_rot'] = e_rot
-            self.abs_errors['abs_e_rot_stats'] = stats_rot
+            self.abs_errors['abs_e_rot'] = abs_err['rot']
+            self.abs_errors['abs_e_rot_stats'] = res_writer.compute_statistics(abs_err['rot'])
+            self.abs_errors['abs_e_ypr'] = abs_err['ypr']
 
-            self.abs_errors['abs_e_ypr'] = e_ypr
+            self.abs_errors['abs_e_yaw'] = abs_err['yaw']
+            self.abs_errors['abs_e_yaw_stats'] = res_writer.compute_statistics(abs_err['yaw'])
+            self.abs_errors['abs_e_pitch'] = abs_err['pitch']
+            self.abs_errors['abs_e_pitch_stats'] = res_writer.compute_statistics(abs_err['pitch'])
+            self.abs_errors['abs_e_roll'] = abs_err['roll']
+            self.abs_errors['abs_e_roll_stats'] = res_writer.compute_statistics(abs_err['roll'])
 
-            self.abs_errors['abs_e_scale_perc'] = e_scale_perc
-            self.abs_errors['abs_e_scale_stats'] = stats_scale
+            self.abs_errors['abs_e_scale_perc'] = abs_err['scale_perc']
+            self.abs_errors['abs_e_scale_stats'] = res_writer.compute_statistics(abs_err['scale_perc'])
+
             print(Fore.GREEN+'...RMSE calculated.')
         return
 
@@ -308,6 +313,21 @@ class Trajectory:
             self.abs_err_stats_fn)
         res_writer.update_and_save_stats(
             self.abs_errors['abs_e_scale_stats'], 'scale',
+            self.abs_err_stats_fn)
+        res_writer.update_and_save_stats(
+            self.abs_errors['abs_e_trans_xy_stats'], 'trans_xy',
+            self.abs_err_stats_fn)
+        res_writer.update_and_save_stats(
+            self.abs_errors['abs_e_trans_z_stats'], 'trans_z',
+            self.abs_err_stats_fn)
+        res_writer.update_and_save_stats(
+            self.abs_errors['abs_e_yaw_stats'], 'yaw',
+            self.abs_err_stats_fn)
+        res_writer.update_and_save_stats(
+            self.abs_errors['abs_e_pitch_stats'], 'pitch',
+            self.abs_err_stats_fn)
+        res_writer.update_and_save_stats(
+            self.abs_errors['abs_e_roll_stats'], 'roll',
             self.abs_err_stats_fn)
 
         self.rel_error_stats_fns = []
@@ -336,29 +356,15 @@ class Trajectory:
             print("Computing relative error at sub-trajectory "
                   "length {0}".format(subtraj_len))
             Tcm = np.identity(4)
-            _, e_trans, e_trans_perc, e_yaw, e_gravity, e_rot, e_rot_deg_per_m =\
-                traj_err.compute_relative_error(
-                    self.p_es, self.q_es, self.p_gt, self.q_gt, Tcm,
-                    subtraj_len, max_dist_diff, self.accum_distances,
-                    self.scale)
-            dist_rel_err = {'rel_trans': e_trans,
-                            'rel_trans_stats':
-                            res_writer.compute_statistics(e_trans),
-                            'rel_trans_perc': e_trans_perc,
-                            'rel_trans_perc_stats':
-                            res_writer.compute_statistics(e_trans_perc),
-                            'rel_rot': e_rot,
-                            'rel_rot_stats':
-                            res_writer.compute_statistics(e_rot),
-                            'rel_yaw': e_yaw,
-                            'rel_yaw_stats':
-                            res_writer.compute_statistics(e_yaw),
-                            'rel_gravity': e_gravity,
-                            'rel_gravity_stats':
-                            res_writer.compute_statistics(e_gravity),
-                            'rel_rot_deg_per_m': e_rot_deg_per_m,
-                            'rel_rot_deg_per_m_stats':
-                            res_writer.compute_statistics(e_rot_deg_per_m)}
+            rel_err = traj_err.compute_relative_error(
+                self.p_es, self.q_es, self.p_gt, self.q_gt, Tcm,
+                subtraj_len, max_dist_diff, self.accum_distances,
+                self.scale)
+            dist_rel_err = {}
+            for metric, raw_key in zip(kRelMetrics, kRelMetricLables):
+                values = rel_err[raw_key]
+                dist_rel_err[metric] = values
+                dist_rel_err[metric + '_stats'] = res_writer.compute_statistics(values)
             self.rel_errors[subtraj_len] = dist_rel_err
         return True
 
