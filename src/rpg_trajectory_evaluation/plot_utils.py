@@ -49,9 +49,15 @@ def boxplot_compare(ax, xlabels,
         idx += 1
 
     ax.set_xticks(np.arange(n_xlabel))
-    ax.set_xticklabels(xlabels)
+    ax.set_xticklabels([str(x) for x in xlabels], rotation=45, ha='right')
+    ax.tick_params(axis='x', labelsize=8)
     xlims = ax.get_xlim()
     ax.set_xlim([xlims[0]-0.1, xlims[1]-0.1])
+    # Keep every tick label: grow the figure instead of dropping ticks.
+    fig = ax.get_figure()
+    inches_per_tick = 0.45
+    fig_w = max(fig.get_size_inches()[0], inches_per_tick * float(n_xlabel))
+    fig.set_size_inches(fig_w, fig.get_size_inches()[1])
     if legend:
         # ax.legend(leg_handles, leg_labels, bbox_to_anchor=(
             # 1.05, 1), loc=2, borderaxespad=0.)
