@@ -13,7 +13,7 @@ import trajectory_loading as traj_loading
 import results_writer as res_writer
 import compute_trajectory_errors as traj_err
 import align_utils as au
-from metrics import kRelMetrics, kRelMetricLables
+from metrics import kRelMetrics, kRelMetricLables, kRelSignedMetrics
 
 import transformations as tf
 
@@ -284,6 +284,14 @@ class Trajectory:
             self.abs_errors['abs_e_trans_z'] = abs_err['trans_z']
             self.abs_errors['abs_e_trans_z_stats'] = res_writer.compute_statistics(abs_err['trans_z'])
 
+            # keep the raw values signed (so the time series shows bias
+            # direction), but compute stats from the magnitude so mean/median
+            # aren't hidden by positive/negative errors cancelling out
+            self.abs_errors['abs_e_along_track'] = abs_err['along_track']
+            self.abs_errors['abs_e_along_track_stats'] = res_writer.compute_statistics(np.abs(abs_err['along_track']))
+            self.abs_errors['abs_e_cross_track'] = abs_err['cross_track']
+            self.abs_errors['abs_e_cross_track_stats'] = res_writer.compute_statistics(np.abs(abs_err['cross_track']))
+
             self.abs_errors['abs_e_rot'] = abs_err['rot']
             self.abs_errors['abs_e_rot_stats'] = res_writer.compute_statistics(abs_err['rot'])
             self.abs_errors['abs_e_ypr'] = abs_err['ypr']
@@ -320,6 +328,12 @@ class Trajectory:
             self.abs_err_stats_fn)
         res_writer.update_and_save_stats(
             self.abs_errors['abs_e_trans_z_stats'], 'trans_z',
+            self.abs_err_stats_fn)
+        res_writer.update_and_save_stats(
+            self.abs_errors['abs_e_along_track_stats'], 'along_track',
+            self.abs_err_stats_fn)
+        res_writer.update_and_save_stats(
+            self.abs_errors['abs_e_cross_track_stats'], 'cross_track',
             self.abs_err_stats_fn)
         res_writer.update_and_save_stats(
             self.abs_errors['abs_e_yaw_stats'], 'yaw',
@@ -366,6 +380,8 @@ class Trajectory:
             for metric, raw_key in zip(kRelMetrics, kRelMetricLables):
                 values = rel_err[raw_key]
                 dist_rel_err[metric] = values
+                if metric in kRelSignedMetrics:
+                    values = np.abs(values)
                 dist_rel_err[metric + '_stats'] = res_writer.compute_statistics(values)
             self.rel_errors[subtraj_len] = dist_rel_err
         return True

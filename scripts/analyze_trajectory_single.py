@@ -14,6 +14,7 @@ from trajectory import Trajectory
 import plot_utils as pu
 from fn_constants import kNsToEstFnMapping, kNsToMatchFnMapping, kFnExt
 from multiple_traj_errors import MulTrajError
+from metrics import kRelSignedMetrics
 
 init(autoreset=True)
 #rc('font', **{'family': 'serif', 'serif': ['Cardo']})  # LEVIN
@@ -249,6 +250,22 @@ if __name__ == '__main__':
         fig.savefig(plot_dir_i+'/translation_error' + '_' + plot_traj.align_str
                     + FORMAT, bbox_inches="tight")
 
+            # absolute along-track / cross-track error
+        fig = plt.figure(figsize=(8, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance [m]', ylabel='Along/Cross-track error [mm]',
+            xlim=[0, plot_traj.accum_distances[-1]])
+        pu.plot_error_n_dim(
+            ax, plot_traj.accum_distances,
+            np.column_stack((plot_traj.abs_errors['abs_e_along_track'],
+                             plot_traj.abs_errors['abs_e_cross_track']))*1000,
+            plot_dir_i, colors=['b', 'g'],
+            labels=['along-track', 'cross-track'])
+        ax.legend()
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/along_cross_track_error' + '_' +
+                    plot_traj.align_str + FORMAT, bbox_inches="tight")
+
             # absolute rotation error
         fig = plt.figure(figsize=(8, 2.5))
         ax = fig.add_subplot(
@@ -312,6 +329,8 @@ if __name__ == '__main__':
             'rel_trans', 'rel_trans_perc', 
             'rel_trans_xy', 'rel_trans_xy_perc', 
             'rel_trans_z', 'rel_trans_z_perc', 
+            'rel_along_track', 'rel_along_track_perc',
+            'rel_cross_track', 'rel_cross_track_perc',
             'rel_rot', 'rel_rot_deg_per_m',
             'rel_yaw', 'rel_yaw_deg_per_m',
             'rel_pitch', 'rel_pitch_deg_per_m',
@@ -320,6 +339,11 @@ if __name__ == '__main__':
         ]
         rel_errors, distances = mt_error.get_relative_errors_and_distances(
             error_types=plot_types)
+            # signed metrics are shown as magnitudes in the boxplots
+        for et in kRelSignedMetrics:
+            if et in rel_errors:
+                rel_errors[et] = [[np.abs(v) for v in dist_values]
+                                  for dist_values in rel_errors[et]]
 
         labels = ['Estimate']
         colors = ['b']
@@ -393,6 +417,54 @@ if __name__ == '__main__':
                            labels, colors)
         fig.tight_layout()
         fig.savefig(plot_dir_i+'/rel_vertical_translation_error_perc' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # along-track error [m]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='Along-track error [m]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_along_track'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_along_track_error' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # along-track error [%]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='Along-track error [%]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_along_track_perc'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_along_track_error_perc' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # cross-track error [m]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='Cross-track error [m]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_cross_track'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_cross_track_error' + suffix + FORMAT,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+                # cross-track error [%]
+        fig = plt.figure(figsize=(6, 2.5))
+        ax = fig.add_subplot(
+            111, xlabel='Distance traveled [m]',
+            ylabel='Cross-track error [%]')
+        pu.boxplot_compare(ax, distances, rel_errors['rel_cross_track_perc'],
+                           labels, colors)
+        fig.tight_layout()
+        fig.savefig(plot_dir_i+'/rel_cross_track_error_perc' + suffix + FORMAT,
                     bbox_inches="tight")
         plt.close(fig)
 

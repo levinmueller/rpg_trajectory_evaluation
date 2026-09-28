@@ -5,7 +5,7 @@ import os
 import pickle
 
 import results_writer as rw
-from metrics import kRelMetrics, kRelMetricLables
+from metrics import kRelMetrics, kRelMetricLables, kRelSignedMetrics
 
 
 class MulTrajError(object):
@@ -98,9 +98,12 @@ class MulTrajError(object):
         for et in kRelMetrics:
             values = []
             for d in self.rel_errors:
+                cur_values = self.rel_errors[d][et]
+                if et in kRelSignedMetrics:
+                    cur_values = np.abs(cur_values)
                 self.rel_errors[d][et+'_stats'] = rw.compute_statistics(
-                    self.rel_errors[d][et])
-                values.extend(self.rel_errors[d][et].tolist())
+                    cur_values)
+                values.extend(cur_values.tolist())
             self.overall_rel_errors[et] = rw.compute_statistics(values)
 
     def saveErrors(self):
