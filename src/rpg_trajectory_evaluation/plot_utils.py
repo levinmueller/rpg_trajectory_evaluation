@@ -43,8 +43,9 @@ def boxplot_compare(ax, xlabels,
         # print("Positions: {0}".format(positions))
         bp = ax.boxplot(d, 0, '', positions=positions, widths=widths)
         color_box(bp, data_colors[idx])
-        tmp, = plt.plot([1, 1], c=data_colors[idx], alpha=0)
-        leg_handles.append(tmp)
+        # proxy artist for the legend; not added to the axes so it does
+        # not affect autoscaling of the y axis
+        leg_handles.append(mpl.lines.Line2D([], [], c=data_colors[idx]))
         leg_labels.append(data_labels[idx])
         idx += 1
 
@@ -53,6 +54,8 @@ def boxplot_compare(ax, xlabels,
     ax.tick_params(axis='x', labelsize=8)
     xlims = ax.get_xlim()
     ax.set_xlim([xlims[0]-0.1, xlims[1]-0.1])
+    # errors are plotted as magnitudes, so anchor the y axis at 0
+    ax.set_ylim(bottom=0)
     # Keep every tick label: grow the figure instead of dropping ticks.
     fig = ax.get_figure()
     inches_per_tick = 0.45
@@ -62,7 +65,6 @@ def boxplot_compare(ax, xlabels,
         # ax.legend(leg_handles, leg_labels, bbox_to_anchor=(
             # 1.05, 1), loc=2, borderaxespad=0.)
         ax.legend(leg_handles, leg_labels)
-    map(lambda x: x.set_visible(False), leg_handles)
 
 
 def plot_trajectory_top(ax, pos, color, name, alpha=1.0):

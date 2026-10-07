@@ -138,8 +138,8 @@ def compute_relative_error(p_es, q_es, p_gt, q_gt, T_cm, dist, max_dist_diff,
 
 
 def compute_absolute_error(p_es_aligned, q_es_aligned, p_gt, q_gt):
-    # translation error
-    e_trans_vec = (p_gt-p_es_aligned)
+    # translation error (estimate - GT, same sign convention as the RPE)
+    e_trans_vec = (p_es_aligned-p_gt)
     e_trans = np.sqrt(np.sum(e_trans_vec**2, 1))
         # 2D and z translation error
     e_trans_xy = np.sqrt(np.sum(e_trans_vec[:, :2]**2, 1))
