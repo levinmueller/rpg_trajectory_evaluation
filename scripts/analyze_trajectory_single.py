@@ -33,8 +33,10 @@ def parse_float_values(values):
 def analyze_multiple_trials(results_dir, est_type, n_trials,
                             recalculate_errors=False,
                             preset_boxplot_distances=[],
-                            preset_boxplot_percentages=[0.1, 0.2, 0.3, 0.4, 0.5],
-                            compute_odometry_error=True):
+                            preset_boxplot_percentages=[],
+                            compute_odometry_error=True,
+                            rpe_overlap=None, rpe_max_dist_diff=None,
+                            rpe_min_samples=0):
     traj_list = []
     mt_error = MulTrajError()
     for trial_i in range(n_trials):
@@ -57,7 +59,9 @@ def analyze_multiple_trials(results_dir, est_type, n_trials,
             nm_est=kNsToEstFnMapping[est_type] + suffix + '.'+kFnExt,
             nm_matches=match_base_fn,
             preset_boxplot_distances=preset_boxplot_distances,
-            preset_boxplot_percentages=preset_boxplot_percentages)
+            preset_boxplot_percentages=preset_boxplot_percentages,
+            rpe_overlap=rpe_overlap, rpe_max_dist_diff=rpe_max_dist_diff,
+            rpe_min_samples=rpe_min_samples)
         if traj.data_loaded:
             traj.compute_absolute_error()
             if compute_odometry_error:
@@ -119,8 +123,22 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--preset_rpe_subtrajectory_lengths_percentage', type=str, nargs="+",
-        help='Preset subtrajectory lengths as percentages of total trajectory length',
+        help='Preset subtrajectory lengths as percentages of total trajectory length. '
+             'Without either preset: powers of 2 m (2, 4, 8, ...) up to the '
+             'evaluated GT path length.',
     )
+    parser.add_argument(
+        '--rpe_overlap', type=float, default=None,
+        help='Overlap fraction in [0, 1) of consecutive RPE sub-trajectories, '
+             'e.g. 0.5 for 50%%. Default: every sample is a start.')
+    parser.add_argument(
+        '--rpe_max_dist_diff', type=float, default=None,
+        help='Max. deviation in meters of an RPE sample\'s GT path length '
+             'from the sub-trajectory length. Default: 20%% of the length.')
+    parser.add_argument(
+        '--rpe_min_samples', type=int, default=0,
+        help='Drop RPE sub-trajectory lengths with fewer samples. '
+             'Default: 0 (keep all).')
     parser.set_defaults(plot=True)
     args = parser.parse_args()
 
@@ -135,6 +153,11 @@ if __name__ == '__main__':
         raise ValueError(
             "Cannot specify both preset_rpe_subtrajectory_lengths_meters and preset_rpe_subtrajectory_lengths_percentage. Please choose one."
         )
+
+    if args.rpe_overlap is not None and not 0.0 <= args.rpe_overlap < 1.0:
+        raise ValueError("--rpe_overlap must be in [0, 1).")
+    if args.rpe_max_dist_diff is not None and args.rpe_max_dist_diff <= 0.0:
+        raise ValueError("--rpe_max_dist_diff must be positive.")
 
     if args.preset_rpe_subtrajectory_lengths_meters is not None:
         args.preset_rpe_subtrajectory_lengths_meters = parse_float_values(
@@ -191,6 +214,9 @@ if __name__ == '__main__':
             args.recalculate_errors,
             args.preset_rpe_subtrajectory_lengths_meters or [],
             args.preset_rpe_subtrajectory_lengths_percentage or [],
+            rpe_overlap=args.rpe_overlap,
+            rpe_max_dist_diff=args.rpe_max_dist_diff,
+            rpe_min_samples=args.rpe_min_samples,
         )
         if traj_list:
             plot_traj = traj_list[args.mul_plot_idx[0]]

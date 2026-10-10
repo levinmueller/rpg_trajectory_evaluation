@@ -44,9 +44,17 @@ This metric measures the drift that builds up over a sub-trajectory of a given l
 
 Output file, one per sub-trajectory length `L`: `saved_results/traj_est/relative_error_statistics_<L>.yaml`
 
+Sub-trajectory lengths `L`: the preset lengths in metres or percentages if given; otherwise powers of 2 m (2, 4, 8, …) up to the GT path length covered by the estimate.
+
 ### How sub-trajectories are formed and compared
 
-1. For **every** sample `i` used as a start, the end sample `j` is the one whose accumulated GT path length is closest to `dist(i) + L`. It must lie within `max_dist_diff = 0.2·L`. Start samples with no such end sample are dropped. Consecutive sub-trajectories therefore overlap strongly.
+1. Start samples `i`:
+   - By default, **every** sample is a start. Consecutive sub-trajectories therefore overlap strongly, and slow or stationary parts of the trajectory contribute more samples than fast parts.
+   - With `--rpe_overlap o` (in `[0, 1)`), the starts are the samples closest to the GT path distances `0, s, 2s, …` with stride `s = (1 − o)·L`. Consecutive sub-trajectories then overlap by about the fraction `o`, and samples are spaced by distance travelled, not by sample rate. Duplicate start samples (stride smaller than the GT spacing) are merged.
+
+   For each start `i`, the end sample `j` is the one whose accumulated GT path length is closest to `dist(i) + L`. It must lie within `max_dist_diff`, which is `0.2·L` by default or a fixed value in metres set with `--rpe_max_dist_diff`. Start samples with no such end sample are dropped. Near the end of the trajectory, this lets ends fall short of `L` by up to `max_dist_diff`. A fixed value should be at least half the largest GT sample spacing (speed / rate), otherwise starts are also dropped where the platform moves fast.
+
+   With `--rpe_min_samples n`, sub-trajectory lengths with fewer than `n` samples are dropped from the statistics, yaml files and plots.
 2. Relative motions:
    `T_es_rel = T_es(i)⁻¹ · T_es(j)` (translation scaled by `s`), and
    `T_gt_rel = T_gt(i)⁻¹ · T_gt(j)`.
@@ -57,29 +65,31 @@ Output file, one per sub-trajectory length `L`: `saved_results/traj_est/relative
 
 So yes: the start of each sub-trajectory is aligned (6-DoF, per sub-trajectory), and the endpoint pose errors make up the statistics.
 
+`l = dist(j) − dist(i)` is the actual GT path length of the sample; all `_perc` and per-metre metrics are normalised by it.
+
 | Metric (yaml key) | Computation | Unit | Interpretation |
 |---|---|---|---|
-| `trans` / `trans_perc` | `‖t_E‖`; `/L·100` | m / % | Endpoint position drift over length `L`. `trans_perc` is the standard "drift in % of distance travelled". The percentage uses the nominal `L`, not the actual GT path length, which can differ by up to ±20 %. |
-| `trans_xy` / `trans_xy_perc` | `‖t_E,xy‖`; `/L·100` | m / % | Horizontal drift. |
-| `trans_z` / `trans_z_perc` | `|t_E,z|`; `/L·100` | m / % | Vertical drift. |
-| `along_track` / `along_track_perc` | `e_W,xy · d`, where `e_W = R_gt(j) · t_E` is the endpoint error rotated into W with the **GT** endpoint orientation (not via `E_w`, see C3), and `d` is the unit xy chord of the GT sub-trajectory `p_gt(j) − p_gt(i)`; `/L·100` | m / % (signed) | Drift along the direction of travel. **Sign:** `e_W = p_es_anchored(j) − p_gt(j)`, so a positive value means the estimate overshoots. This matches the ATE sign. It is mainly a symptom of scale error. |
-| `cross_track` / `cross_track_perc` | `e_W,xy · d⊥`; `/L·100` | m / % (signed) | Lateral drift. Positive means the estimate ends up to the left. This is mainly a symptom of yaw drift. |
-| `rot` / `rot_deg_per_m` | Rotation angle of `E`; `/L` | deg / deg·m⁻¹ | Total orientation drift over `L`. |
+| `trans` / `trans_perc` | `‖t_E‖`; `/L·100` | m / % | Endpoint position drift over length `L`. `trans_perc` is the standard "drift in % of distance travelled". The percentage divides by each sample's actual GT path length `dist(j) − dist(i)`, not by the nominal `L` (they differ by up to ±`max_dist_diff`). |
+| `trans_xy` / `trans_xy_perc` | `‖t_E,xy‖`; `/l·100` | m / % | Horizontal drift. |
+| `trans_z` / `trans_z_perc` | `|t_E,z|`; `/l·100` | m / % | Vertical drift. |
+| `along_track` / `along_track_perc` | `e_W,xy · d`, where `e_W = R_gt(j) · t_E` is the endpoint error rotated into W with the **GT** endpoint orientation (not via `E_w`, see C3), and `d` is the unit xy chord of the GT sub-trajectory `p_gt(j) − p_gt(i)`; `/l·100` | m / % (signed) | Drift along the direction of travel. **Sign:** `e_W = p_es_anchored(j) − p_gt(j)`, so a positive value means the estimate overshoots. This matches the ATE sign. It is mainly a symptom of scale error. |
+| `cross_track` / `cross_track_perc` | `e_W,xy · d⊥`; `/l·100` | m / % (signed) | Lateral drift. Positive means the estimate ends up to the left. This is mainly a symptom of yaw drift. |
+| `rot` / `rot_deg_per_m` | Rotation angle of `E`; `/l` | deg / deg·m⁻¹ | Total orientation drift over `L`. |
 | `yaw`, `pitch`, `roll` | `|·|` of the ZYX Euler angles of `E_w` | deg | Yaw drift is the dominant unobservable VIO drift. Pitch and roll are about the axes of the fixed frame, not the body axes. |
-| `rot_yaw_per_m`, `rot_pitch_per_m`, `rot_roll_per_m` | The three values above `/L` | deg·m⁻¹ | Length-normalised yaw, pitch and roll drift. |
+| `rot_yaw_per_m`, `rot_pitch_per_m`, `rot_roll_per_m` | The three values above `/l` | deg·m⁻¹ | Length-normalised yaw, pitch and roll drift. |
 | `gravity` | `sqrt(pitch² + roll²)` of `E_w` | deg | Approximate tilt error, i.e. how wrong the estimated gravity direction is. It should stay small and not grow with `L`. |
 
 ### How to read the RPE
 
 - `trans_perc` and `rot_deg_per_m` should be roughly constant across `L` for random-walk-like drift. Short `L` values are dominated by noise.
-- Samples overlap and are correlated, so `num_samples` overstates how many independent samples there are.
+- Samples overlap and are correlated, so `num_samples` overstates how many independent samples there are. `--rpe_overlap` trades sample count against correlation; `--rpe_overlap 0` gives non-overlapping sub-trajectories.
 - The rotation angle (`rot`), the norms (`trans`, `trans_xy`, `trans_z`) and `yaw` do not change with the choice of fixed frame. The pitch/roll split does (see caveat C3). The along/cross-track split does not, because it uses the GT frame.
 
 ---
 
 ## Caveats in the current implementation
 
-- **C1 – RPE index shift.** `compute_comparison_indices_length` returns only the end indices that were found. `compute_relative_error` then pairs the k-th end index with start sample `k`. If a start sample in the *middle* of the trajectory has no end sample within ±0.2·L, every later pair is shifted. This happens when GT spacing is large compared with 0.4·L, for example with 2 Hz sampling and short sub-trajectory lengths. Missing start samples at the end of the trajectory are harmless.
+- **C1 – RPE index shift (fixed).** `compute_comparison_indices_length` used to return only the end indices that were found, and `compute_relative_error` paired the k-th end index with start sample `k`. A start sample in the *middle* of the trajectory without an end sample shifted every later pair. It now returns `(start, end)` pairs. Relative errors cached before the fix are recomputed automatically.
 - **C2 – `scale` metric.** It uses `np.diff(p, 0)`, which is the identity, so it computes `|‖p_es_aligned‖ / ‖p_gt‖ − 1|·100`. That is a ratio of distances from the origin, not of per-step motions. Do not interpret it as scale drift.
 - **C3 – RPE frame.** Step 4 rotates the error with the **raw estimated** orientation, so `E_w` ends up in M's axes. If M and W differ by a yaw `ψ`, the pitch/roll split is rotated by `ψ`. The norms, `rot`, `yaw` and `gravity` are not affected. `along_track` and `cross_track` are **not** taken from `E_w`. They rotate `t_E` with the GT endpoint orientation, so they are expressed in W like `d`, and any M–W yaw has no effect on them.
 - **C4 – Along/cross-track reference direction.** ATE uses the direction between consecutive GT samples. That direction is noisy when the GT is noisy compared with the motion per sample (slow motion, high rate), and it is undefined when the platform stands still: those samples get 0 and pull the statistics down. RPE uses the GT chord of the sub-trajectory. On strongly curved sub-trajectories (chord ≪ `L`), "along" means along the chord, not along the path.

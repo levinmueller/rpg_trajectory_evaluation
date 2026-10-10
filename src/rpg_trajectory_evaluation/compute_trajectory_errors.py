@@ -9,57 +9,62 @@ import transformations as tf
 
 def compute_relative_error(p_es, q_es, p_gt, q_gt, T_cm, dist, max_dist_diff,
                            accum_distances=[],
-                           scale=1.0):
+                           scale=1.0, overlap=None):
 
     if len(accum_distances) == 0:
         accum_distances = tu.get_distance_from_start(p_gt)
     comparisons = tu.compute_comparison_indices_length(
-        accum_distances, dist, max_dist_diff)
+        accum_distances, dist, max_dist_diff, overlap)
 
     n_samples = len(comparisons)
     print('number of samples = {0} '.format(n_samples))
-    if n_samples < 2:
-        print("Too few samples! Will not compute.")
+    if n_samples == 0:
+        print("No samples! Will not compute.")
         return {k: np.array([]) for k in ['trans', 'trans_perc', 'trans_xy', 'trans_xy_perc', 'trans_z', 'trans_z_perc', 'along_track', 'along_track_perc', 'cross_track', 'cross_track_perc', 'yaw', 'pitch', 'roll', 'gravity', 'rot', 'rot_deg_per_m', 'rot_yaw_per_m', 'rot_pitch_per_m', 'rot_roll_per_m']}
 
     T_mc = np.linalg.inv(T_cm)
     errors = []
     errors_xy_gt_w = []
     seg_dirs_xy = []
-    for idx, c in enumerate(comparisons):
-        if not c == -1:
-            T_c1 = tu.get_rigid_body_trafo(q_es[idx, :], p_es[idx, :])
-            T_c2 = tu.get_rigid_body_trafo(q_es[c, :], p_es[c, :])
-            T_c1_c2 = np.dot(np.linalg.inv(T_c1), T_c2)
-            T_c1_c2[:3, 3] *= scale
+    seg_lens = []
+    for idx, c in comparisons:
+        T_c1 = tu.get_rigid_body_trafo(q_es[idx, :], p_es[idx, :])
+        T_c2 = tu.get_rigid_body_trafo(q_es[c, :], p_es[c, :])
+        T_c1_c2 = np.dot(np.linalg.inv(T_c1), T_c2)
+        T_c1_c2[:3, 3] *= scale
 
-            T_m1 = tu.get_rigid_body_trafo(q_gt[idx, :], p_gt[idx, :])
-            T_m2 = tu.get_rigid_body_trafo(q_gt[c, :], p_gt[c, :])
-            T_m1_m2 = np.dot(np.linalg.inv(T_m1), T_m2)
+        T_m1 = tu.get_rigid_body_trafo(q_gt[idx, :], p_gt[idx, :])
+        T_m2 = tu.get_rigid_body_trafo(q_gt[c, :], p_gt[c, :])
+        T_m1_m2 = np.dot(np.linalg.inv(T_m1), T_m2)
 
-            T_m1_m2_in_c1 = np.dot(T_cm, np.dot(T_m1_m2, T_mc))
-            T_error_in_c2 = np.dot(np.linalg.inv(T_m1_m2_in_c1), T_c1_c2)
-            T_c2_rot = np.eye(4)
-            T_c2_rot[0:3, 0:3] = T_c2[0:3, 0:3]
-            T_error_in_w = np.dot(T_c2_rot, np.dot(
-                T_error_in_c2, np.linalg.inv(T_c2_rot)))
-            errors.append(T_error_in_w)
+        T_m1_m2_in_c1 = np.dot(T_cm, np.dot(T_m1_m2, T_mc))
+        T_error_in_c2 = np.dot(np.linalg.inv(T_m1_m2_in_c1), T_c1_c2)
+        T_c2_rot = np.eye(4)
+        T_c2_rot[0:3, 0:3] = T_c2[0:3, 0:3]
+        T_error_in_w = np.dot(T_c2_rot, np.dot(
+            T_error_in_c2, np.linalg.inv(T_c2_rot)))
+        errors.append(T_error_in_w)
 
-            # translation error in the GT world frame, for the along-track /
-            # cross-track split: T_error_in_w is rotated with the raw
-            # estimated orientation (estimate's world frame), which is yawed
-            # arbitrarily w.r.t. the GT world frame for VIO. Rotating with the
-            # GT end orientation instead gives the endpoint error of the
-            # start-anchored estimate, est - gt, expressed in GT world axes.
-            errors_xy_gt_w.append(
-                np.dot(T_m2[0:3, 0:3], T_error_in_c2[0:3, 3])[0:2])
+        # translation error in the GT world frame, for the along-track /
+        # cross-track split: T_error_in_w is rotated with the raw
+        # estimated orientation (estimate's world frame), which is yawed
+        # arbitrarily w.r.t. the GT world frame for VIO. Rotating with the
+        # GT end orientation instead gives the endpoint error of the
+        # start-anchored estimate, est - gt, expressed in GT world axes.
+        errors_xy_gt_w.append(
+            np.dot(T_m2[0:3, 0:3], T_error_in_c2[0:3, 3])[0:2])
 
-            # xy direction of the GT sub-trajectory (start -> end chord),
-            # used as reference for the along-track / cross-track split
-            seg_xy = p_gt[c, :2] - p_gt[idx, :2]
-            seg_norm = np.linalg.norm(seg_xy)
-            seg_dirs_xy.append(
-                seg_xy / seg_norm if seg_norm > 1e-8 else np.zeros(2))
+        # xy direction of the GT sub-trajectory (start -> end chord),
+        # used as reference for the along-track / cross-track split
+        seg_xy = p_gt[c, :2] - p_gt[idx, :2]
+        seg_norm = np.linalg.norm(seg_xy)
+        seg_dirs_xy.append(
+            seg_xy / seg_norm if seg_norm > 1e-8 else np.zeros(2))
+
+        # actual GT path length of the sub-trajectory (within
+        # +-max_dist_diff of dist), used to normalize the _perc and
+        # per-meter metrics
+        seg_lens.append(accum_distances[c] - accum_distances[idx])
 
     error_trans_norm = []
     error_trans_perc = []
@@ -81,30 +86,31 @@ def compute_relative_error(p_es, q_es, p_gt, q_gt, T_cm, dist, max_dist_diff,
     e_pitch_deg_per_m = []
     e_roll_deg_per_m = []
 
-    for e, e_xy_gt_w, dir_xy in zip(errors, errors_xy_gt_w, seg_dirs_xy):
+    for e, e_xy_gt_w, dir_xy, seg_len in zip(errors, errors_xy_gt_w,
+                                             seg_dirs_xy, seg_lens):
         # translation error
             # full 3D translation error
         tn = np.linalg.norm(e[0:3, 3])
         error_trans_norm.append(tn)
-        error_trans_perc.append(tn / dist * 100)
+        error_trans_perc.append(tn / seg_len * 100)
             # 2D translation error
         tn_xy = np.linalg.norm(e[0:2, 3])
         error_trans_xy.append(tn_xy)
-        error_trans_xy_perc.append(tn_xy / dist * 100)
+        error_trans_xy_perc.append(tn_xy / seg_len * 100)
             # z translation error
         tn_z = abs(e[2, 3])
         error_trans_z.append(tn_z)
-        error_trans_z_perc.append(tn_z / dist * 100)
+        error_trans_z_perc.append(tn_z / seg_len * 100)
             # along-track / cross-track error: project the xy translation
             # error onto the GT sub-trajectory direction and its left-hand
             # perpendicular (kept signed, stats/boxplots use the magnitude)
         perp_xy = np.array([-dir_xy[1], dir_xy[0]])
         tn_along = np.dot(e_xy_gt_w, dir_xy)
         error_along_track.append(tn_along)
-        error_along_track_perc.append(tn_along / dist * 100)
+        error_along_track_perc.append(tn_along / seg_len * 100)
         tn_cross = np.dot(e_xy_gt_w, perp_xy)
         error_cross_track.append(tn_cross)
-        error_cross_track_perc.append(tn_cross / dist * 100)
+        error_cross_track_perc.append(tn_cross / seg_len * 100)
 
         # orientation error
             # yaw, pitch, roll angles from rotation matrix
@@ -118,10 +124,10 @@ def compute_relative_error(p_es, q_es, p_gt, q_gt, T_cm, dist, max_dist_diff,
             # gravity error in degrees (pitch and roll)
         error_gravity.append(np.sqrt(ypr_angles[1]**2+ypr_angles[2]**2)*180.0/np.pi)
             # rotation error in degrees per meter
-        e_rot_deg_per_m.append(e_rot[-1] / dist)
-        e_yaw_deg_per_m.append(error_yaw[-1] / dist)
-        e_pitch_deg_per_m.append(error_pitch[-1] / dist)
-        e_roll_deg_per_m.append(error_roll[-1] / dist)
+        e_rot_deg_per_m.append(e_rot[-1] / seg_len)
+        e_yaw_deg_per_m.append(error_yaw[-1] / seg_len)
+        e_pitch_deg_per_m.append(error_pitch[-1] / seg_len)
+        e_roll_deg_per_m.append(error_roll[-1] / seg_len)
 
     return {
         'errors': errors,

@@ -23,7 +23,10 @@ class Trajectory:
     rel_error_prefix = 'relative_error_statistics_'
     saved_res_dir_nm = 'saved_results'
     cache_res_dir_nm = 'cached'
-    default_boxplot_perc = [0.1, 0.2, 0.3, 0.4, 0.5]
+    # default subtrajectory lengths: powers of 2 m, starting here
+    min_power_of_two_boxplot_dist = 2.0
+    # bump when the relative error computation changes, invalidates caches
+    rel_error_cache_version = 3
 
     def __init__(self, results_dir, platform='', alg_name='', dataset_name='',
                  align_type='sim3', align_num_frames=-1, suffix='',
@@ -32,7 +35,9 @@ class Trajectory:
                  nm_est='stamped_traj_estimate.txt',
                  nm_matches='stamped_est_gt_matches.txt',
                  preset_boxplot_distances=[],
-                 preset_boxplot_percentages=[]):
+                 preset_boxplot_percentages=[],
+                 rpe_overlap=None, rpe_max_dist_diff=None,
+                 rpe_min_samples=0):
 
         assert os.path.exists(results_dir),\
             "Specified directory {0} does not exist.".format(results_dir)
@@ -93,6 +98,22 @@ class Trajectory:
 
         self.abs_errors = {}
 
+        # RPE sampling: overlap of consecutive sub-trajectories (None: every
+        # sample is a start), max. deviation of the GT segment length from
+        # the subtrajectory length in m (None: 20 % of the length) and
+        # min. number of samples per length (0: off)
+        assert rpe_overlap is None or 0.0 <= rpe_overlap < 1.0,\
+            "rpe_overlap must be in [0, 1)."
+        assert rpe_max_dist_diff is None or rpe_max_dist_diff > 0.0,\
+            "rpe_max_dist_diff must be positive."
+        self.rpe_overlap = rpe_overlap
+        self.rpe_max_dist_diff = rpe_max_dist_diff
+        self.rpe_min_samples = int(rpe_min_samples)
+        self.rel_err_cache_params = {
+            'version': Trajectory.rel_error_cache_version,
+            'overlap': self.rpe_overlap,
+            'max_dist_diff': self.rpe_max_dist_diff}
+
         # we cache relative error since it is time-comsuming to compute
         self.rel_errors = {}
         self.cached_rel_err_fn = os.path.join(
@@ -109,11 +130,11 @@ class Trajectory:
         if len(preset_boxplot_distances) != 0:
             print("Use preset boxplot distances.")
             self.preset_boxplot_distances = preset_boxplot_distances
-        else:
-            if not self.boxplot_pcts:
-                self.boxplot_pcts = Trajectory.default_boxplot_perc
+        elif self.boxplot_pcts:
             print("Use percentages {} for boxplot.".format(self.boxplot_pcts))
             self.compute_boxplot_distances()
+        else:
+            self.compute_power_of_two_boxplot_distances()
 
         self.align_trajectory()
 
@@ -151,9 +172,14 @@ class Trajectory:
             print('Loading cached relative (odometry) errors from ' +
                   self.cached_rel_err_fn)
             with open(self.cached_rel_err_fn, "rb") as f:
-                self.rel_errors = pickle.load(f)
-            print("Loaded odometry error calcualted at {0}".format(
-                self.rel_errors.keys()))
+                cached = pickle.load(f)
+            if cached.get('params') == self.rel_err_cache_params:
+                self.rel_errors = cached['rel_errors']
+                print("Loaded odometry error calcualted at {0}".format(
+                    self.rel_errors.keys()))
+            else:
+                print(Fore.YELLOW + "Cached relative errors were computed "
+                      "with different settings, will recompute.")
 
         print(Fore.GREEN+'...done.')
 
@@ -162,7 +188,8 @@ class Trajectory:
     def cache_current_error(self):
         if self.rel_errors:
             with open(self.cached_rel_err_fn, 'wb') as f:
-                pickle.dump(self.rel_errors, f)
+                pickle.dump({'params': self.rel_err_cache_params,
+                             'rel_errors': self.rel_errors}, f)
             print(Fore.YELLOW + "Saved relative error to {0}.".format(
                 self.cached_rel_err_fn))
 
@@ -223,6 +250,20 @@ class Trajectory:
         self.preset_boxplot_distances = [self.truncate(pct*self.traj_length, 2)
                                           for pct in self.boxplot_pcts]
 
+        print("...done. Computed preset subtrajecory lengths:"
+              " {0}".format(self.preset_boxplot_distances))
+
+    def compute_power_of_two_boxplot_distances(self):
+        # 2, 4, 8, ... m up to the GT path length covered by the estimate
+        # (the matched GT), adapts to the trajectory length
+        max_len = self.accum_distances[-1]
+        print("Use powers of 2 up to the evaluated GT path length {0:.2f} as "
+              "subtrajectory lengths.".format(max_len))
+        self.preset_boxplot_distances = []
+        l = Trajectory.min_power_of_two_boxplot_dist
+        while l <= max_len:
+            self.preset_boxplot_distances.append(l)
+            l *= 2.0
         print("...done. Computed preset subtrajecory lengths:"
               " {0}".format(self.preset_boxplot_distances))
 
@@ -363,7 +404,14 @@ class Trajectory:
     def compute_relative_error_at_subtraj_len(self, subtraj_len,
                                               max_dist_diff=-1):
         if max_dist_diff < 0:
-            max_dist_diff = 0.2 * subtraj_len
+            if self.rpe_max_dist_diff is None:
+                max_dist_diff = 0.2 * subtraj_len
+            else:
+                max_dist_diff = self.rpe_max_dist_diff
+                if max_dist_diff > 0.2 * subtraj_len:
+                    print(Fore.YELLOW + "rpe_max_dist_diff {0} m is more than "
+                          "20 % of the sub-trajectory length {1} m.".format(
+                              max_dist_diff, subtraj_len))
 
         if self.rel_errors and (subtraj_len in self.rel_errors):
             print("Relative error at sub-trajectory length {0} is already "
@@ -375,7 +423,7 @@ class Trajectory:
             rel_err = traj_err.compute_relative_error(
                 self.p_es, self.q_es, self.p_gt, self.q_gt, Tcm,
                 subtraj_len, max_dist_diff, self.accum_distances,
-                self.scale)
+                self.scale, self.rpe_overlap)
             dist_rel_err = {}
             for metric, raw_key in zip(kRelMetrics, kRelMetricLables):
                 values = rel_err[raw_key]
@@ -396,8 +444,26 @@ class Trajectory:
                   " subtrajectory lengths...")
             for l in self.preset_boxplot_distances:
                 suc = suc and self.compute_relative_error_at_subtraj_len(l)
+            if self.rpe_min_samples > 0:
+                self.drop_sparse_subtraj_lengths()
         self.success = suc
         print(Fore.GREEN+"...done.")
+
+    def drop_sparse_subtraj_lengths(self):
+        kept = []
+        for l in self.preset_boxplot_distances:
+            n_samples = len(self.rel_errors[l]['rel_trans'])
+            if n_samples >= self.rpe_min_samples:
+                kept.append(l)
+            else:
+                print(Fore.YELLOW + "Drop sub-trajectory length {0}: {1} "
+                      "samples < {2}.".format(l, n_samples,
+                                              self.rpe_min_samples))
+                del self.rel_errors[l]
+        if not kept:
+            print(Fore.RED + "No sub-trajectory length has at least {0} "
+                  "samples.".format(self.rpe_min_samples))
+        self.preset_boxplot_distances = kept
 
     def get_relative_errors_and_distances(
             self, error_types=['rel_trans', 'rel_trans_perc', 'rel_yaw']):
