@@ -24,6 +24,7 @@ def compute_relative_error(p_es, q_es, p_gt, q_gt, T_cm, dist, max_dist_diff,
 
     T_mc = np.linalg.inv(T_cm)
     errors = []
+    errors_xy_gt_w = []
     seg_dirs_xy = []
     for idx, c in enumerate(comparisons):
         if not c == -1:
@@ -43,6 +44,15 @@ def compute_relative_error(p_es, q_es, p_gt, q_gt, T_cm, dist, max_dist_diff,
             T_error_in_w = np.dot(T_c2_rot, np.dot(
                 T_error_in_c2, np.linalg.inv(T_c2_rot)))
             errors.append(T_error_in_w)
+
+            # translation error in the GT world frame, for the along-track /
+            # cross-track split: T_error_in_w is rotated with the raw
+            # estimated orientation (estimate's world frame), which is yawed
+            # arbitrarily w.r.t. the GT world frame for VIO. Rotating with the
+            # GT end orientation instead gives the endpoint error of the
+            # start-anchored estimate, est - gt, expressed in GT world axes.
+            errors_xy_gt_w.append(
+                np.dot(T_m2[0:3, 0:3], T_error_in_c2[0:3, 3])[0:2])
 
             # xy direction of the GT sub-trajectory (start -> end chord),
             # used as reference for the along-track / cross-track split
@@ -71,7 +81,7 @@ def compute_relative_error(p_es, q_es, p_gt, q_gt, T_cm, dist, max_dist_diff,
     e_pitch_deg_per_m = []
     e_roll_deg_per_m = []
 
-    for e, dir_xy in zip(errors, seg_dirs_xy):
+    for e, e_xy_gt_w, dir_xy in zip(errors, errors_xy_gt_w, seg_dirs_xy):
         # translation error
             # full 3D translation error
         tn = np.linalg.norm(e[0:3, 3])
@@ -89,10 +99,10 @@ def compute_relative_error(p_es, q_es, p_gt, q_gt, T_cm, dist, max_dist_diff,
             # error onto the GT sub-trajectory direction and its left-hand
             # perpendicular (kept signed, stats/boxplots use the magnitude)
         perp_xy = np.array([-dir_xy[1], dir_xy[0]])
-        tn_along = np.dot(e[0:2, 3], dir_xy)
+        tn_along = np.dot(e_xy_gt_w, dir_xy)
         error_along_track.append(tn_along)
         error_along_track_perc.append(tn_along / dist * 100)
-        tn_cross = np.dot(e[0:2, 3], perp_xy)
+        tn_cross = np.dot(e_xy_gt_w, perp_xy)
         error_cross_track.append(tn_cross)
         error_cross_track_perc.append(tn_cross / dist * 100)
 
